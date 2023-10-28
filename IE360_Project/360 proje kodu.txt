@@ -1,0 +1,193 @@
+library(readxl)
+library(xts)
+library(MASS)
+library(tseries)
+library(ggplot2)
+library(forecast)
+library(caret)
+
+#Load the data.
+data<-read_excel("C:/Users/ASUS/Downloads/IE360-ProjectData.xlsx")
+head(data) #The first 5 column of the data
+tail(data) #The last 5 column of the data
+data <- head(data, n=nrow(data)-4) #Remove the last 4 rows because of NaN values.
+tail(data)
+#QUESTION 1
+
+#Convert data into time-series.
+dates <- seq(as.Date("2000/1/1"), by = "quarter", length.out =
+               nrow(data))
+ts.ugs <- xts(data$UGS, order.by = dates)
+ts.dgs <- xts(data$DGS, order.by = dates)
+
+#Plot the time series for the sales for 2 products.
+plot(ts.ugs)
+plot(ts.dgs)
+
+#Plot the acf and pacf in order to determine regular and seasonal differencing to be applied.
+
+acf(ts.ugs,28) #There is a spike at lag 4 indicating an autocorrelation and seasonality
+#Also, strong positive correlation between consecutive observations.
+
+pacf(ts.ugs,28) #There is a spike at lag 1 
+#on the value 2 time steps in the past after removing the influence of shorter lags.
+
+acf(ts.dgs,28) #There are significant spikes at seasonal lags of 4.
+#The presence of seasonality and need for seasonal differencing.
+
+pacf(ts.dgs,28) #There are spikes at lag 2&3 which indicate that the current value is dependent
+#on the value 2&3 time steps in the past after removing the influence of shorter lags.
+
+#The acf and pacf plots for both of 2 products look very similar to each other.
+#The same model can be used to forecast the sales for the upcoming months.
+
+#METHOD A
+#UGS Forecasting
+
+#Question 1 - Try different
+adf.test(ts.ugs) #Augmented Dickey-Fuller Test to test the stationary.
+
+#Taking the first difference.
+ts.ugs.diff<-diff(ts.ugs)
+ts.ugs.diff<-ts.ugs.diff[-1]
+plot(ts.ugs.diff)
+acf(ts.ugs.diff)
+pacf(ts.ugs.diff)
+adf.test(ts.ugs.diff) #showing that we obtained stationary data
+
+#The acf shows the seasonality at lag 4.
+ts.ugs.diff.diff4 <- diff(ts.ugs.diff,4)
+plot(ts.ugs.diff.diff4)
+ts.ugs.diff.diff4<-ts.ugs.diff.diff4[-1:-4]
+ts.ugs.diff.diff4
+acf(ts.ugs.diff.diff4) #no significantly strong autocorrelation
+pacf(ts.ugs.diff.diff4) 
+kpss.test(ts.ugs.diff.diff4) #showing that the data is stationary
+
+
+#DGS Forecasting
+#Question 1 - Try different
+adf.test(ts.dgs) #Augmented Dickey-Fuller Test to test the stationary.
+
+#Taking the first difference.
+ts.dgs.diff<-diff(ts.dgs)
+plot(ts.dgs.diff)
+ts.dgs.diff<-ts.dgs.diff[-1]
+acf(ts.dgs.diff)
+pacf(ts.dgs.diff)
+adf.test(ts.dgs.diff) #checking stationarity
+
+#The acf shows the seasonality at lag 4.
+ts.dgs.diff.diff4 <- diff(ts.dgs.diff,4)
+ts.dgs.diff.diff4 <- ts.dgs.diff.diff4[-1:-4]
+plot(ts.dgs.diff.diff4)
+acf(ts.dgs.diff.diff4)
+pacf(ts.dgs.diff.diff4)
+kpss.test(ts.dgs.diff.diff4) #checking stationarity
+
+
+#Question 3
+#ARIMA(0,1,0)(0,1,0)[4] model is chosen.
+#It is chosen because one regular and one seasonal differencing is done
+#As we saw in the ACF and PACF functions, there were no need for MA or AR
+ugs.model <- Arima(ts.ugs, order=c(0, 1, 0), seasonal = list(order = c(0, 1, 0), period = 4))
+ugs.model
+tsdisplay(ugs.model$residuals)
+
+
+#Neighborhood Search for ugs
+#1. ARIMA(1,1,0)(0,1,0)[4]
+model.1 <- Arima(ts.ugs, order=c(1, 1, 0), seasonal = list(order = c(0, 1, 0), period = 4))
+tsdisplay(model.1$residuals)
+
+#2. ARIMA(1,1,1)(0,1,0)[4]
+model.2 <- Arima(ts.ugs, order=c(1, 1, 1), seasonal = list(order = c(0, 1, 0), period = 4))
+tsdisplay(model.2$residuals)
+
+#3. ARIMA(0,1,1)(0,1,0)[4]
+model.3 <- Arima(ts.ugs, order=c(0, 1, 1), seasonal = list(order = c(0, 1, 0), period = 4))
+tsdisplay(model.3$residuals)
+
+#4. ARIMA(0,2,0)(0,1,0)[4]
+model.4 <- Arima(ts.ugs, order=c(0, 2, 0), seasonal = list(order = c(0, 1, 0), period = 4))
+tsdisplay(model.4$residuals)
+
+#5. ARIMA(0,1,0)(1,1,0)[4]
+model.5 <- Arima(ts.ugs, order=c(0, 1, 0), seasonal = list(order = c(1, 1, 0), period = 4))
+tsdisplay(model.5$residuals)
+
+#6. ARIMA(0,1,0)(0,1,1)[4]
+model.6 <- Arima(ts.ugs, order=c(0, 1, 0), seasonal = list(order = c(0, 1, 1), period = 4))
+tsdisplay(model.6$residuals)
+
+ugs.model
+model.1 #this turns out to be the best as it has the lowest AIC, AICc, and BIC
+model.2
+model.3
+model.4 
+model.5
+model.6
+tsdisplay(model.1$residuals)
+tsdisplay(model.2$residuals)
+tsdisplay(model.3$residuals)
+tsdisplay(model.4$residuals)
+tsdisplay(model.5$residuals)
+tsdisplay(model.6$residuals)
+
+#Create a table to compare the different models.
+
+
+#Neighborhood Search for dgs
+dgs.model <- Arima(ts.dgs, order=c(0, 1, 0), seasonal = list(order = c(0, 1, 0), period = 4))
+dgs.model
+tsdisplay(dgs.model$residuals)
+
+#1. ARIMA(1,1,0)(0,1,0)[4]
+model.dgs.1 <- Arima(ts.dgs, order=c(1, 1, 0), seasonal = list(order = c(0, 1, 0), period = 4))
+tsdisplay(model.dgs.1$residuals)
+
+#2. ARIMA(1,1,1)(0,1,0)[4]
+model.dgs.2 <- Arima(ts.dgs, order=c(1, 1, 1), seasonal = list(order = c(0, 1, 0), period = 4))
+tsdisplay(model.dgs.2$residuals)
+
+#3. ARIMA(0,1,1)(0,1,0)[4]
+model.dgs.3 <- Arima(ts.dgs, order=c(0, 1, 1), seasonal = list(order = c(0, 1, 0), period = 4))
+tsdisplay(model.dgs.3$residuals)
+
+#4. ARIMA(0,2,0)(0,1,0)[4]
+model.dgs.4 <- Arima(ts.dgs, order=c(0, 2, 0), seasonal = list(order = c(0, 1, 0), period = 4))
+tsdisplay(model.dgs.4$residuals)
+
+#5. ARIMA(0,1,0)(1,1,0)[4]
+model.dgs.5 <- Arima(ts.dgs, order=c(0, 1, 0), seasonal = list(order = c(1, 1, 0), period = 4))
+tsdisplay(model.dgs.5$residuals)
+
+#6. ARIMA(0,1,0)(0,1,1)[4]
+model.dgs.6 <- Arima(ts.dgs, order=c(0, 1, 0), seasonal = list(order = c(0, 1, 1), period = 4))
+tsdisplay(model.dgs.6$residuals)
+
+dgs.model
+model.dgs.1 
+model.dgs.2
+model.dgs.3
+model.dgs.4 #best model. it has by far the lowest AIC, AICc, and BIC
+model.dgs.5
+model.dgs.6
+tsdisplay(model.dgs.1$residuals)
+tsdisplay(model.dgs.2$residuals)
+tsdisplay(model.dgs.3$residuals)
+tsdisplay(model.dgs.4$residuals)
+tsdisplay(model.dgs.5$residuals)
+tsdisplay(model.dgs.6$residuals)
+
+
+#Forecasts UGS
+data.ts.forecast.ugs<-forecast(model.1, h=4) #ugs forecast for 2007
+data.ts.forecast.ugs
+plot(data.ts.forecast.ugs)
+
+#Forecasts DGS
+data.ts.forecast.dgs<-forecast(model.dgs.4, h=4) #dgs forecast for 2007
+data.ts.forecast.dgs
+plot(data.ts.forecast.dgs)
+
